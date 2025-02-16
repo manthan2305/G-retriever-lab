@@ -19,7 +19,7 @@ from src.utils.lr_schedule import adjust_learning_rate
 from transformers import AutoModel
 
 from huggingface_hub import login
-login(token='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')
+login(token='hf_...')
 
 def main(args):
 

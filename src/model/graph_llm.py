@@ -138,8 +138,6 @@ class GraphLLM(torch.nn.Module):
         # mean pooling
         # g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce='mean')
 
-        breakpoint()
-
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
             self.attention_pool = AttentionPooling(hidden_dim=n_embeds.size(-1), device=self.model.device)

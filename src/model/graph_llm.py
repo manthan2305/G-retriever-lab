@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.cuda.amp import autocast as autocast
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from torch_scatter import scatter
+import torch.nn.functional as F
 from src.model.gnn import load_gnn_model
 from peft import (
     LoraConfig,
@@ -17,6 +18,20 @@ EOS = '</s>'
 
 IGNORE_INDEX = -100
 
+class AttentionPooling(nn.Module):
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.attention = nn.Linear(hidden_dim, 1)
+
+    def forward(self, node_embeds, batch):
+        # Computer attention scores
+        attn_scores = self.attention(node_embeds)
+        attn_scores = F.softmax(attn_scores, dim=0) 
+
+        # Weighted sum of note embeddings
+        graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+        
+        return graph_embeds
 
 class GraphLLM(torch.nn.Module):
 
@@ -88,7 +103,8 @@ class GraphLLM(torch.nn.Module):
 
         self.projector = nn.Sequential(
             nn.Linear(args.gnn_hidden_dim, 2048),
-            nn.Sigmoid(),
+            nn.GELU(),                                  # Replace with sigmoid
+            nn.LayerNorm(2048),                         # Added New LayerNorm
             nn.Linear(2048, 4096),
         ).to(self.model.device)
 
@@ -114,7 +130,13 @@ class GraphLLM(torch.nn.Module):
         n_embeds, _ = self.graph_encoder(graphs.x, graphs.edge_index.long(), graphs.edge_attr)
 
         # mean pooling
-        g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce='mean')
+        # g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce='mean')
+
+        # Attention Pooling
+        if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
+            self.attention_pool = AttentionPooling(hidden_dim=n_embeds.size(-1))
+            
+        g_embeds = self.attention_pool(n_embeds, graphs.batch)
 
         return g_embeds
 

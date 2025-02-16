@@ -34,7 +34,7 @@ class GCN(torch.nn.Module):
 
 class GraphTransformer2(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers, dropout, num_heads=4):
-        super(GraphTransformer, self).__init__()
+        super(GraphTransformer2, self).__init__()
         self.convs = torch.nn.ModuleList()
         self.bns = torch.nn.ModuleList()
         self.lns = torch.nn.ModuleList()  # LayerNorm for residual connections
@@ -92,7 +92,7 @@ class GraphTransformer2(torch.nn.Module):
         edge_attr = self.edge_encoder(edge_attr)
 
         # Calculate Relative Positional Encoding
-        # Here, we assume adj_t is the edge_index
+        # Here, adj_t is the edge_index
         row, col = adj_t
         relative_pos = (x[row] - x[col]).norm(p=2, dim=-1, keepdim=True)
         

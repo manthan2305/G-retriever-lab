@@ -140,19 +140,22 @@ class GraphLLM(torch.nn.Module):
         # g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce='mean')
 
         # If e_embeds are available, we will combine
-        if e_embeds is not None:
-            row, col = graphs.edge_index
-            combined_embeds = n_embeds.clone()
-            combined_embeds[row] += e_embeds
-            combined_embeds[col] += e_embeds
-        else:
-            combined_embeds = n_embeds
+        row, col = graphs.edge_index
+        node_edge_agg = torch.zeros_like(n_embeds)
+
+        # Aggregate incoming edge features
+        node_edge_agg.index_add_(0, row, e_embeds)
+
+        # combined node and edge features
+        combined_embeds = n_embeds + node_edge_agg
 
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
             self.attention_pool = AttentionPooling(hidden_dim=combined_embeds.size(-1), device=self.model.device)
             
         g_embeds = self.attention_pool(combined_embeds, graphs.batch)
+
+        breakpoint()
 
         return g_embeds
 

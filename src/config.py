@@ -37,7 +37,7 @@ def parse_args_llama():
     parser.add_argument("--max_memory", type=csv_list, default=[40,40, 40, 40])
 
     # GNN related
-    parser.add_argument("--gnn_model_name", type=str, default='gt')
+    parser.add_argument("--gnn_model_name", type=str, default='gt2')
     parser.add_argument("--gnn_num_layers", type=int, default=4)
     parser.add_argument("--gnn_in_dim", type=int, default=1024)
     parser.add_argument("--gnn_hidden_dim", type=int, default=1024)

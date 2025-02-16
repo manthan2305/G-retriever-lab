@@ -133,16 +133,26 @@ class GraphLLM(torch.nn.Module):
     def encode_graphs(self, samples):
         graphs = samples['graph']
         graphs = graphs.to(self.model.device)
-        n_embeds, _ = self.graph_encoder(graphs.x, graphs.edge_index.long(), graphs.edge_attr)
+        # n_embeds, _ = self.graph_encoder(graphs.x, graphs.edge_index.long(), graphs.edge_attr)
+        n_embeds, e_embeds = self.graph_encoder(graphs.x, graphs.edge_index.long(), graphs.edge_attr)   # consider node and edge embeddings
 
         # mean pooling
         # g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce='mean')
 
+        # If e_embeds are available, we will combine
+        if e_embeds is not None:
+            row, col = graphs.edge_index
+            combined_embeds = n_embeds.clone()
+            combined_embeds[row] += e_embeds
+            combined_embeds[col] += e_embeds
+        else:
+            combined_embeds = n_embeds
+
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
-            self.attention_pool = AttentionPooling(hidden_dim=n_embeds.size(-1), device=self.model.device)
+            self.attention_pool = AttentionPooling(hidden_dim=combined_embeds.size(-1), device=self.model.device)
             
-        g_embeds = self.attention_pool(n_embeds, graphs.batch)
+        g_embeds = self.attention_pool(combined_embeds, graphs.batch)
 
         return g_embeds
 

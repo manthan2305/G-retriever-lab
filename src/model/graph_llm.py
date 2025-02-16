@@ -19,12 +19,18 @@ EOS = '</s>'
 IGNORE_INDEX = -100
 
 class AttentionPooling(nn.Module):
-    def __init__(self, hidden_dim):
+    def __init__(self, hidden_dim, device):
         super().__init__()
         self.attention = nn.Linear(hidden_dim, 1)
+        self.device = device
+        self.to(device)
 
     def forward(self, node_embeds, batch):
-        # Computer attention scores
+        # Ensure input's device
+        node_embeds = node_embeds.to(self.device)
+        batch = batch.to(self.device)
+
+        # Computer attention score
         attn_scores = self.attention(node_embeds)
         attn_scores = F.softmax(attn_scores, dim=0) 
 
@@ -132,9 +138,11 @@ class GraphLLM(torch.nn.Module):
         # mean pooling
         # g_embeds = scatter(n_embeds, graphs.batch, dim=0, reduce='mean')
 
+        breakpoint()
+
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
-            self.attention_pool = AttentionPooling(hidden_dim=n_embeds.size(-1))
+            self.attention_pool = AttentionPooling(hidden_dim=n_embeds.size(-1), device=self.model.device)
             
         g_embeds = self.attention_pool(n_embeds, graphs.batch)
 

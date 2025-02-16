@@ -155,8 +155,6 @@ class GraphLLM(torch.nn.Module):
             
         g_embeds = self.attention_pool(combined_embeds, graphs.batch)
 
-        breakpoint()
-
         return g_embeds
 
     def forward(self, samples):

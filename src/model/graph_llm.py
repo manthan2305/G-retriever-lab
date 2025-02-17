@@ -18,6 +18,33 @@ EOS = '</s>'
 
 IGNORE_INDEX = -100
 
+class MultiHeadAttentionPooling(nn.Module):
+    def __init__(self, hidden_dim, num_heads, device):
+        super().__init__()
+        self.num_heads = num_heads
+        self.attentions = nn.ModuleList([nn.Linear(hidden_dim, 1) for _ in range(num_heads)])
+        self.device = device
+        self.to(device)
+
+    def forward(self, node_embeds, batch):
+        node_embeds = node_embeds.to(self.device)
+        batch = batch.to(self.device)
+
+        all_graph_embeds = []
+        for attention in self.attentions:
+            attn_scores = attention(node_embeds).squeeze(-1)
+            attn_scores = attn_scores - scatter(attn_scores, batch, dim=0, reduce='max')[batch]
+            attn_scores = attn_scores.exp()
+            attn_scores = attn_scores / (scatter(attn_scores, batch, dim=0, reduce='sum')[batch] + 1e-9)
+            attn_scores = attn_scores.unsqueeze(-1)
+
+            graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+            all_graph_embeds.append(graph_embeds)
+
+        # Concatenate all head outputs
+        graph_embeds = torch.cat(all_graph_embeds, dim=-1)
+        return graph_embeds
+
 class AttentionPooling(nn.Module):
     def __init__(self, hidden_dim, device):
         super().__init__()
@@ -156,7 +183,7 @@ class GraphLLM(torch.nn.Module):
 
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
-            self.attention_pool = AttentionPooling(hidden_dim=combined_embeds.size(-1), device=self.model.device)
+            self.attention_pool = MultiHeadAttentionPooling(hidden_dim=combined_embeds.size(-1), device=self.model.device)
             
         g_embeds = self.attention_pool(combined_embeds, graphs.batch)
 
@@ -188,9 +215,6 @@ class GraphLLM(torch.nn.Module):
             label_input_ids = labels.input_ids[i][:self.max_new_tokens] + eos_tokens.input_ids
             input_ids = descriptions.input_ids[i][:self.max_txt_len] + questions.input_ids[i] + eos_user_tokens.input_ids + label_input_ids
             inputs_embeds = self.word_embedding(torch.tensor(input_ids).to(self.model.device))
-
-            breakpoint()
-
             inputs_embeds = torch.cat([bos_embeds, graph_embeds[i].unsqueeze(0), inputs_embeds], dim=0)
 
             batch_inputs_embeds.append(inputs_embeds)

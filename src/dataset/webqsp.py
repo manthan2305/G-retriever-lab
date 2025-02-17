@@ -77,7 +77,7 @@ def preprocess():
         graph = torch.load(f'{path_graphs}/{index}.pt')
         q_emb = q_embs[index]
         # subg, desc = retrieval_via_pcst(graph, q_emb, nodes, edges, topk=3, topk_e=5, cost_e=0.5)
-        subg, desc = retrieval_via_attention(graph, q_emb, nodes, edges, topk=3, topk_e=5, cost_e=0.5)
+        subg, desc = retrieval_via_attention(graph, q_emb, nodes, edges, topk=3, topk_e=5)    # Retrieval using attention
         torch.save(subg, f'{cached_graph}/{index}.pt')
         open(f'{cached_desc}/{index}.txt', 'w').write(desc)
 

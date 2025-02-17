@@ -18,6 +18,33 @@ EOS = '</s>'
 
 IGNORE_INDEX = -100
 
+class MultiHeadAttentionPooling(nn.Module):
+    def __init__(self, hidden_dim, num_heads, device):
+        super().__init__()
+        self.num_heads = num_heads
+        self.attentions = nn.ModuleList([nn.Linear(hidden_dim, 1) for _ in range(num_heads)])
+        self.device = device
+        self.to(device)
+
+    def forward(self, node_embeds, batch):
+        node_embeds = node_embeds.to(self.device)
+        batch = batch.to(self.device)
+
+        all_graph_embeds = []
+        for attention in self.attentions:
+            attn_scores = attention(node_embeds).squeeze(-1)
+            attn_scores = attn_scores - scatter(attn_scores, batch, dim=0, reduce='max')[batch]
+            attn_scores = attn_scores.exp()
+            attn_scores = attn_scores / (scatter(attn_scores, batch, dim=0, reduce='sum')[batch] + 1e-9)
+            attn_scores = attn_scores.unsqueeze(-1)
+
+            graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+            all_graph_embeds.append(graph_embeds)
+
+        # Concatenate all head outputs
+        graph_embeds = torch.cat(all_graph_embeds, dim=-1)
+        return graph_embeds
+
 class AttentionPooling(nn.Module):
     def __init__(self, hidden_dim, device):
         super().__init__()
@@ -26,17 +53,22 @@ class AttentionPooling(nn.Module):
         self.to(device)
 
     def forward(self, node_embeds, batch):
-        # Ensure input's device
+        # Ensure inputs are on the correct device
         node_embeds = node_embeds.to(self.device)
         batch = batch.to(self.device)
 
-        # Computer attention score
-        attn_scores = self.attention(node_embeds)
-        attn_scores = F.softmax(attn_scores, dim=0) 
-
-        # Weighted sum of note embeddings
-        graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+        # Compute attention scores
+        attn_scores = self.attention(node_embeds).squeeze(-1)
         
+        # Compute softmax within each graph
+        attn_scores = attn_scores - scatter(attn_scores, batch, dim=0, reduce='max')[batch]
+        attn_scores = attn_scores.exp()
+        attn_scores = attn_scores / (scatter(attn_scores, batch, dim=0, reduce='sum')[batch] + 1e-9)
+        attn_scores = attn_scores.unsqueeze(-1)
+
+        # Weighted sum of node embeddings
+        graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+
         return graph_embeds
 
 class GraphLLM(torch.nn.Module):
@@ -108,10 +140,10 @@ class GraphLLM(torch.nn.Module):
         ).to(self.model.device)
 
         self.projector = nn.Sequential(
-            nn.Linear(args.gnn_hidden_dim, 2048),
+            nn.Linear(4096, 8192),
             nn.GELU(),                                  # Replace with sigmoid
-            nn.LayerNorm(2048),                         # Added New LayerNorm
-            nn.Linear(2048, 4096),
+            nn.LayerNorm(8192),                         # Added New LayerNorm
+            nn.Linear(8192, 4096),
         ).to(self.model.device)
 
         self.word_embedding = self.model.model.get_input_embeddings()
@@ -151,7 +183,7 @@ class GraphLLM(torch.nn.Module):
 
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
-            self.attention_pool = AttentionPooling(hidden_dim=combined_embeds.size(-1), device=self.model.device)
+            self.attention_pool = MultiHeadAttentionPooling(hidden_dim=combined_embeds.size(-1), num_heads=4, device=self.model.device)
             
         g_embeds = self.attention_pool(combined_embeds, graphs.batch)
 

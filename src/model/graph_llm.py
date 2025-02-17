@@ -26,17 +26,22 @@ class AttentionPooling(nn.Module):
         self.to(device)
 
     def forward(self, node_embeds, batch):
-        # Ensure input's device
+        # Ensure inputs are on the correct device
         node_embeds = node_embeds.to(self.device)
         batch = batch.to(self.device)
 
-        # Computer attention score
-        attn_scores = self.attention(node_embeds)
-        attn_scores = F.softmax(attn_scores, dim=0) 
-
-        # Weighted sum of note embeddings
-        graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+        # Compute attention scores
+        attn_scores = self.attention(node_embeds).squeeze(-1)
         
+        # Compute softmax within each graph
+        attn_scores = attn_scores - scatter(attn_scores, batch, dim=0, reduce='max')[batch]
+        attn_scores = attn_scores.exp()
+        attn_scores = attn_scores / (scatter(attn_scores, batch, dim=0, reduce='sum')[batch] + 1e-9)
+        attn_scores = attn_scores.unsqueeze(-1)
+
+        # Weighted sum of node embeddings
+        graph_embeds = scatter(node_embeds * attn_scores, batch, dim=0, reduce='sum')
+
         return graph_embeds
 
 class GraphLLM(torch.nn.Module):
@@ -183,6 +188,9 @@ class GraphLLM(torch.nn.Module):
             label_input_ids = labels.input_ids[i][:self.max_new_tokens] + eos_tokens.input_ids
             input_ids = descriptions.input_ids[i][:self.max_txt_len] + questions.input_ids[i] + eos_user_tokens.input_ids + label_input_ids
             inputs_embeds = self.word_embedding(torch.tensor(input_ids).to(self.model.device))
+
+            breakpoint()
+
             inputs_embeds = torch.cat([bos_embeds, graph_embeds[i].unsqueeze(0), inputs_embeds], dim=0)
 
             batch_inputs_embeds.append(inputs_embeds)

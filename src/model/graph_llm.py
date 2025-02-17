@@ -140,10 +140,10 @@ class GraphLLM(torch.nn.Module):
         ).to(self.model.device)
 
         self.projector = nn.Sequential(
-            nn.Linear(args.gnn_hidden_dim, 2048),
+            nn.Linear(4096, 8192),
             nn.GELU(),                                  # Replace with sigmoid
-            nn.LayerNorm(2048),                         # Added New LayerNorm
-            nn.Linear(2048, 4096),
+            nn.LayerNorm(8192),                         # Added New LayerNorm
+            nn.Linear(8192, 4096),
         ).to(self.model.device)
 
         self.word_embedding = self.model.model.get_input_embeddings()
@@ -183,7 +183,7 @@ class GraphLLM(torch.nn.Module):
 
         # Attention Pooling
         if not hasattr(self, 'attention_pool'):         # Initialize attention pooling layer once
-            self.attention_pool = MultiHeadAttentionPooling(hidden_dim=combined_embeds.size(-1), device=self.model.device)
+            self.attention_pool = MultiHeadAttentionPooling(hidden_dim=combined_embeds.size(-1), num_heads=4, device=self.model.device)
             
         g_embeds = self.attention_pool(combined_embeds, graphs.batch)
 

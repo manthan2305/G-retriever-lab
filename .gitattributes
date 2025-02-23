@@ -1,0 +1,2 @@
+dataset/gqa/train_sceneGraphs.json filter=lfs diff=lfs merge=lfs -text
+dataset/gqa/val_sceneGraphs.json filter=lfs diff=lfs merge=lfs -text
